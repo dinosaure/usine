@@ -1,0 +1,374 @@
+\documentclass[a4paper, 11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{url}
+\usepackage{biblatex}
+
+\lstset{basicstyle=\footnotesize\ttfamily}
+
+\begin{document}
+\title{Benchmark sur OcsigenServer}
+\author{Romain Calascibetta}
+
+\bibliographystyle{plain}
+\bibliography{ref}
+\maketitle
+
+\section{Introduction}
+
+Le benchmarking de  serveur  HTTP  est  un  critère  de sélection important pour
+l'utilisateur final.  Ainsi,  le résultat que  peut proposer un benchmarking est
+très  important.   Cependant,  le  benchmarking,  et  tout  particulièrement  le
+benchmarking  de  serveur  HTTP  n'est  pas  si  simple.   En  effet,   utiliser
+basiquement des outils  tel que Apache Benchmark ou  Httperf peuvent vous amener
+à tester  les performances de  votre serveur physique  ou de votre  réseau et le
+résultat n'en est pas plus intéressant.
+
+Dans ce document,  nous allons voir  le contexte de benchmarking d'OcsigenServer
+et comparer sa version 2.4.0 avec  la futur version 3.0.0 utilisant la librairie
+Cohttp.  Nous continuerons  ce benchmarking avec  Nginx et Apache  pour avoir un
+ordre  d'idée   sur  les   performances  d'OcsigenServer   par  rapport   à  ces
+concurrents.
+
+\section{Contexte Physique}
+
+Le  contexte  physique  d'un benchmarking  sur  un  serveur  HTTP  est  un point
+important car il doit être en  phase avec une situation de déploiement générale.
+Lancer les outils de  test  sur  le  même  ordinateur  que  le serveur n'est pas
+efficient    surtout    si    ce    dernier    utilise    des    techniques   de
+\emph{multi-threading}.  Dans cette situation notre test consistera à évaluer le
+\emph{scheduling} de notre système entre l'outil de test et le serveur.
+
+\subsection{Test sur la concurrence}
+
+Ce facteur qui  est déterminant dans une situation  de déploiement générale.  En
+effet,  à moins  que votre site  internet ne soit  visiter que par  une seule et
+unique  personne,  la question  de la  concurrence  des  requêtes  est  un point
+central dans le benchmarking de serveur HTTP.
+
+Dans une situation lambda,  la concurrence ne s'applique pas qu'à une seule page
+internet mais sur l'ensemble du site (image, script JavaScript,  CSS, etc.) mais
+ce point évaluera  plutôt les performances du  site web que le  serveur HTTP lui
+même.  Cela ne  nous concerne pas (ou  pourrait nous concerner  si nous voulions
+faire un benchmarking sur Eliom).
+
+Dans nos  objectifs,  nous voulons tester  la vitesse  pure d'OcsigenServer.  Et
+l'une des questions à laquelle  nous devons répondre est:  \guillemotleft Est ce
+que le  serveur est capable de  gérer plusieurs  connexions simultanément  et si
+oui, quelle est sa limite ?\guillemotright
+
+D'un  point de  vu technique,  un  tel test  peut  être  limité  par  le serveur
+physique lui-même.  En  effet,  une distribution standard tel  que Debian impose
+des limites arbitraires sur le serveur et ses processus.  Nous devons autant sur
+le client que  sur le serveur enlever  ces limites pour que  le benchmarking n'y
+soit que très peu influencé.
+
+\subsection{Test sur le réseau}
+
+Le  réseau peut  être un  frein au  benchmarking.  En effet,  les  tests peuvent
+saturer le réseau et le client peut être sujet à un goulot d'étranglement.  Pour
+que le test soit efficient,  seul le  serveur peut être un goulot d'étranglement
+(et dans cette situation, nous arrivons à des limitations physiques).  Ainsi, il
+est préférable d'avoir  au  moins  2  clients  physiques  afin  d'éviter une tel
+situation.  Un goulot d'étranglement peut s'évaluer  à l'aide de l'I/O du réseau
+sur le client. L'outil Httperf vous notifiera de l'approche d'une telle limite.
+
+La  charge  CPU  n'est  pas  un  facteur  déterminant  pour  repérer  un  goulot
+d'étranglement.  En effet Httperf  peut avoir une forte utilisation  du CPU même
+quand il dispose de capacités inutilisées.
+
+Un test  sur un réseau local  est préférable au  vu de  la complexité  du réseau
+internet.  Nous pourrions supposer que celui-ci ne rajoute que du \textsl{bruit}
+au benchmark et puisse se  simplifier en un facteur constant cependant,  n'ayant
+pas souvent pas connaissance de  l'architecture réseau de votre fournisseur,  il
+serait dangereux de considérer ce point comme tel.
+
+L'objectif est  donc d'abstraire au mieux  la contrainte réseau  pour tester les
+performances pures  du serveur  HTTP.  Celle-ci existera  toujours mais  si elle
+intervient sur  le serveur  \textbf{uniquement},  cela valide  tout les  tests à
+charge  inférieur comme  valide (n'ayant  pas été  influencé par  une quelconque
+limite physique du  côté  du  client  et  du  serveur).  Il  est donc préférable
+d'avoir un  serveur connecté à 2  clients physiques à l'aide  d'un switch réseau
+(ce dernier peut être connecté à un  ou plusieurs cartes réseaux du serveur pour
+augmenter la bande passante dont le serveur dispose).
+
+\subsection{Test sur la taille des données}
+
+Ce  dernier  test  n'est  pas  forcément  le  test  le  plus  efficient  pour un
+benchmarking d'un  serveur HTTP.  En effet,  il peut  amener à ne  tester que la
+vitesse de lecture de votre  système.  Cependant,  il faut prouver que appliquer
+ce test n'implique que les limitations  physiques de ce système.  Pour ce faire,
+il faut tester  le serveur HTTP avec des  serveurs de plus en plus  gros (et que
+les autres paramètres  soient  invariants)  et  si  on  dénote une différence de
+performance pouvant se  factoriser à un facteur constant,  c'est  que le serveur
+HTTP n'est plus  qu'assujettis  aux  limitations  systèmes  sur  la lecture d'un
+fichier\footnotemark[1].
+
+\footnotetext[1]{On  devrait  prendre  en  considération aussi le
+réseau  dans   ce   test.   Cependant,   si   vous   respecter  les  contraintes
+expliquées   ci-dessus   et  que   vous   faites   bien   attention   au  goulot
+d'étranglement, ce test devrait rester vrai.}
+
+\subsection{Configuration}
+
+Nous avons  expliqué juste  avant que le  système d'exploitation  pouvait limité
+les  tests.   En  effet,   celui-ci  est  généralement  configuré  pour  ce  que
+l'utilisateur  final e  besoin ou  pour sauvegarder  les ressources.  Cependant,
+nous pouvons configurer le serveur pour dépasser ces limites arbitraires.
+
+Nous allons ici configurer une Debian 7.6 Wheezy.
+
+La  première  configuration est  la  limitation  de  \emph{file  descriptor} par
+processus.  Celle-ci est en général limité à 1024 ce qui fait qu'un serveur HTTP
+\emph{single-threaded} ne  peut gérer un peu  moins de  1024 connexions  en même
+temps. Il s'agit de dépasser cette limite de cette manière:
+
+\begin{lstlisting}
+# echo '* soft nofile 20000' >> /etc/security/limits.conf
+# echo '* hard nofile 20000' >> /etc/security/limits.conf
+\end{lstlisting}
+
+Un autre  problème de limitation  système est le  nombre de port  TCP disponible
+qui produit avec les outils tel que Apache Benchmark l'erreur suivante:
+
+\begin{lstlisting}
+error: connect() failed: Cannot assign requested address (99)
+\end{lstlisting}
+
+Pour  ce problème  nous allons  nous  baser  sur  la  configuration  proposé par
+\emph{Performance Scalability  of Multi-Core Web  Server - Bryan  Veal and Annie
+Fong} pour le fichier \url{/etc/sysctl.conf}:
+
+\begin{lstlisting}
+fs.file-max = 5000000
+net.core.netdev_max_backlog = 400000
+net.core.optmem_max = 10000000
+net.core.rmem_default = 10000000
+net.core.rmem_max = 10000000
+net.core.somaxconn = 100000
+net.core.wmem_default = 10000000
+net.core.wmem_max = 10000000
+net.ipv4.conf.all.rp_filter = 1
+net.ipv4.conf.default.rp_filter = 1
+net.ipv4.ip_local_port_range = 1024 65535
+net.ipv4.tcp_congestion_control = bic
+net.ipv4.tcp_ecn = 0
+net.ipv4.tcp_max_syn_backlog = 12000
+net.ipv4.tcp_max_tw_buckets = 2000000
+net.ipv4.tcp_mem = 30000000 30000000 30000000
+net.ipv4.tcp_rmem = 30000000 30000000 30000000
+net.ipv4.tcp_sack = 1
+net.ipv4.tcp_syncookies = 0
+net.ipv4.tcp_timestamps = 1
+net.ipv4.tcp_wmem = 30000000 30000000 30000000
+\end{lstlisting}
+
+Nous avons  ensuite cette option pour  éviter le  TIME-WAIT pour  les connexions
+n'ayant pas le Keep-Alive dans leurs \emph{headers}\footnotemark[1].
+
+\begin{lstlisting}
+net.ipv4.tcp_tw_reuse = 1
+\end{lstlisting}
+
+Pour  réduire encore  plus le  TIME-WAIT sur  les connexions  TCP,  nous pouvons
+utiliser  une  nouvelle  option  qui  n'est  conseillé  de  mettre  que  pour le
+benchmarking.  Mettre cette  option sur  la configuration  d'un serveur  mise en
+production n'est pas recommandé\footnotemark[2].
+
+\begin{lstlisting}
+net.ipv4.tcp_tw_recycle = 1
+\end{lstlisting}
+
+Ensuite, il s'agit de charger cette nouvelle configuration à l'aide de:
+
+\begin{lstlisting}
+# sysctl -p /etc/sysctl.conf
+\end{lstlisting}
+
+Enfin,  au delà de la configuration  système,  nous avons aussi la configuration
+du serveur  HTTP qui peut impacter  les performances.  En ce  sens,  même si les
+serveurs HTTP comparés  n'ont  pas  les  mêmes  interfaces de configuration,  il
+faudrait qu'ils aient plus  ou moins les mêmes paramètres pour  la mise en cache
+par exemple.  L'écriture de  log  aussi  à  un  impact  sur  les performances et
+celui-ci n'est pas forcément le même entre Nginx et Apache par exemple.
+
+\footnotetext[1]{Le  comportement d'une  requête HTTP  ayant le  Keep-Alive dans
+son \emph{header} demande de faire des  tests plus spécifiques (puisque ce point
+est en lien avec le technique de \emph{pipeline} propre au protocole HTTP 1.1)}
+
+\footnotetext[2]{En  effet,  cette  option  rend  particulièrement  difficile la
+gestion des clients qui sont derrières une même IP (typiquement avec NAT).}
+
+\section{OcsigenServer et Cohttp}
+
+\subparagraph{}
+Après  que nous  ayons les  conditions nécessaires  pour un  benchmark efficace,
+nous  devons tout  de même  parler des  différences  qu'il  peut  y  avoir entre
+OcsigenServer  2.4.0  et   OcsigenServer  3.0.0.   En  effet,   les  différences
+techniques de ces  derniers vont certainement influencer les  résultats de leurs
+benchmarking respectifs.  Il y a véritablement  deux grosses différences à noter
+entre ces 2 versions.
+
+\subparagraph{Pipeline}
+La  première  concerne la  gestion  du  \emph{pipeline}.  Celle-ci  concerne une
+gestion  de  plusieurs  requêtes  dans  une  même  connexion.  Fasse  à  une tel
+situation,  la version 2.4.0 va paralléliser le traitement de ces requêtes alors
+que la  version 3.0.0 va traiter  les requêtes  de manière  séquentielle.  De ce
+point,  un benchmarking d'un site web dans  sa globalité avec les outils tel que
+Siege,  Jmeter ou OpenSTA entre les deux versions devrait dénoter une différence
+de performance.
+
+Cependant,  la technique de  \emph{pipeline} est en général peu  utilisé par les
+clients  (de  part  sa  complexité de  gestion  pour  les  Firewalls  qui  ne la
+supportent  tout simplement  pas).  De  plus,  le  test  de \emph{pipeline},  ne
+concerne pas la vitesse pure d'OcsigenServer  sur la charge qu'il peut supporter
+sur le nombre de requête simultanée.
+
+\subparagraph{Réutilisation des connexions}
+Une  autre  différence  notable  aussi  concerne  l'utilisation  d'OcsigenServer
+entant  que  client.   En  effet,   la  version  2.4.0  fait  une  réutilisation
+intelligente des  connexions vers d'autres  serveurs alors que  la version 3.0.0
+va réinitialiser une  nouvelle connexion pour chaque requête  à destination d'un
+autre serveur.
+
+\subparagraph{}
+Bien entendu,  ce  dernier point n'entre  pas en compte  dans notre benchmarking
+puisque nous  testons avant tout la  vitesse de  \textbf{réponse} du  serveur au
+client.  De ce faite, il existe bien des différences techniques entre la version
+2.4.0 et la  version 3.0.0 qui ne  sont pas pris en compte  dans ce benchmarking
+mais qui  peuvent influencer la vitesse  du serveur  dans des  cas d'utilisation
+spécifique.
+
+\section{Les outils de test}
+
+Il existe beaucoup  d'outils  pouvant  tester  un  serveur  HTTP.  Nous en avons
+dénoter  3  qui  sont  assez simple  de  déploiement  et  dont  le  résultat est
+facilement manipulable.  Chacun présente  des qualités et des  défauts mais cela
+ne devrait  pas pour autant les  exclure d'une quelconque  \emph{test suite} car
+même si leurs  objectifs  est  le  même,  leurs  comportements  ne  l'est pas et
+utiliser Apache Benchmark  par exemple au lieu de  Httperf peut révéler d'autres
+cause à la vitesse de traitement des requêtes du serveur.
+
+Il est donc  plus  juste  d'utiliser  tout  ces  outils,  d'essayer  au mieux de
+converger leurs résultats pour garantir un plus large contexte d'utilisation.
+
+\subsection{Apache Benchmark}
+
+Apache  Benchmark  est  un  outil  de  test  \emph{single-threaded}  qui  a  été
+développé pour tester le serveur HTTP Apache. Il est disponible à l'aide de:
+
+\begin{lstlisting}
+# aptitude install apache-utils
+\end{lstlisting}
+
+Ensuite,  nous avons  différentes options pour  faire le test  avec cette outil.
+Nous allons nous intéresser plus  spécifiquement à l'option de concurrence [-c],
+du nombre de requête [-n] et du nombre de seconde du test [-t].
+
+Nous ferons des tests spécifiques avec  celui-ci pour savoir en combien de temps
+le  serveur  peut  répondre  pour  [-n]  connexions  simultanées  envoyant  [-c]
+requêtes.  Nous ferons le  test  sur  le  fichier  \url{index.html} contenant un
+\guillemotleft Hello  World!\guillemotright et sur  un fichier d'1  Mo.  Dans ce
+test,  le facteur déterminant reste le nombre de connexion concurrente néanmoins
+nous verrons que le test n'est pas si propice à faire des conclusions.
+
+Nous ferons  un test sur  la charge que  peut supporter le  serveur en utilisant
+[-t] pour  limiter le traitement  à 1 seconde  et ainsi voir  combien de requête
+nous pouvons traiter en ce temps.  Ce paramètre sera notre invariant par rapport
+aux  autres.  Nous incrémenterons  ensuite le  nombre de  connexions simultanées
+[-c] progressivement.  Enfin,  nous  aurons un nombre de  requête [-n] invariant
+que nous comparerons au nombre de réponse reçu.
+
+\subsection{Httperf}
+
+Httperf est un logiciel \emph{single-threaded} créer  par HP un peu plus complet
+et complexe que Apache Benchmark. Il est disponible à l'aide de:
+
+\begin{lstlisting}
+# aptitude install httperf
+\end{lstlisting}
+
+La  particularité de  Httperf est  qu'il augmente  progressivement le  nombre de
+requête  pour  gérer   les  départs  à  froids  d'un   serveur  (comme  pour  un
+échauffement progressif).  Un autre point le  caractérisant est une gestion bien
+moins fine de la concurrence.  En effet, il peut arriver que toutes les requêtes
+du premier \emph{shot} ne soient pas  terminées avant la deuxième seconde (si on
+considère que vous  faites un \emph{shot} de [n] requête(s)  par seconde) ce qui
+fait que  le prochain \emph{shot} de  requête contiendra peut  être les requêtes
+non terminées du premier \emph{shot}.
+
+Ici,  nous  augmenterons progressivement  l'option  [--rate]  pour  augmenter le
+nombre de  connexion concurrente à lancer  (ce qu'on  nomme ici  le \emph{shot})
+par seconde.  Ensuite,  nous  limiterons [--num-call] et  [--num-conn] qui sont
+respectivement le nombre  de  requête  par  seconde  et  le nombre de connexions
+concurrentes  (qui  correspondra  à la  borne  maximal  du  nombre  de connexion
+simultané que le vont tester).
+
+Ainsi,  dans l'utilisation de  Httperf,  pour que son test soit  presque le même
+que celui de Apache Benchmark, [--rate] convergera vers [--num-call].
+
+\subsection{Weighttp}
+
+Weighttp  est un  outil \emph{multi-threaded}  créer par  l'équipe en  charge du
+serveur HTTP Lighttpd.  Il n'est pas sur les dépôts officiels de Debian, il faut
+donc faire une installation à la main:
+
+\begin{lstlisting}
+# aptitude install libev-dev
+# git clone https://github.com/lighttpd/weighttp.git
+# cd weighttp
+# ./waf configure
+# ./waf build
+# ./waf install
+\end{lstlisting}
+
+Les options  de Weighttp sont  presque les mêmes  à ceci près  que l'option [-t]
+dénote le nombre de processus légers pour l'exécution des requêtes.  Ensuite, le
+logiciel nous informe du nombre de requête ayant eu une réponse en 1 seconde.
+
+Il faut savoir  que Weighttp est plus  rapide que Apache Benchmark  (ce qui peut
+être préjudiciable si on applique  la configuration pour limiter les TIME-WAIT).
+Dans notre  contexte,  cela peut  être avec Apache  Benchmark le  meilleur outil
+pour tester notre serveur HTTP.
+
+\subsection{Outil d'abstraction}
+
+Il  existe  enfin   des  outils  d'abstractions  testant   un  certain  contexte
+d'utilisation   du  serveur   HTTP   cependant,   soit   ces   outils  utilisent
+exclusivement l'un des outils  cité plus haut ce qui ne  permet pas de converger
+les résultats,  soit leurs tests ne correspond pas à ce que nous cherchons, soit
+il  ne s'intègre  pas à  notre contexte  physique  (à  savoir  un  serveur  et 2
+clients).
+
+On peut cependant parler d'\ref{autobench}, ou encore d'\ref{abc}.
+
+\section{Le Test}
+
+Les  critères  d'évaluation  d'un serveur  HTTP  sont  très  important  car nous
+pourrions être amené  à évaluer autre chose que le  serveur HTTP.  Nous avons vu
+que  nous  pouvions  tester  la vitesse  de  lecture  du  système  ou  tester le
+scheduling de celui-ci si nous ne faisions pas attention.
+
+Le critère  le plus probant  pour savoir la  vitesse pure  d'un serveur  HTTP et
+dénotant rapidement  les limites  de celui-ci  est de  voir combien  de réponses
+nous avons  eu du  serveur pour  N requêtes  pendant 1  seconde.  Les invariants
+permettent de mettre en  valeur la rapidité du serveur et  de montrer combien de
+requête le serveur est capable de traiter en une seconde.
+
+Enfin,  un tel test  permet  de  mettre  en  valeur  des  points critiques où le
+serveur ne sera plus  capable de répondre à toute les  requêtes et nous pourrons
+ainsi  repérer par  dichotomie les  goulots d'étranglements  dans le  code (bien
+entendu,  ceci  n'est  possible  que si  nous  avons  bien  abstrait  toutes les
+limitations techniques et physiques liées au serveur).
+
+Ce test est  aussi admis par la communauté  informatique comme représentatif des
+performances entre les différents serveurs HTTP\footnotemark[1].
+
+\footnotetext[1]{N2O                utilise                ce               test
+(\url{https://github.com/5HT/n2o#why-erlang-in-web})  mais  GWAN  ce  base aussi
+sur de tels critères.}
+
+\end{document}
