@@ -1,0 +1,18 @@
+OASISFormat:            0.4
+Name:                   usine
+Version:                1.0
+Synopsis:               Benchmarking for HTTP Server
+Authors:                Romain Calascibetta
+Maintainers:            Romain Calascibetta <romain.calascibetta@gmail.com>
+Homepage:               https://github.com/dinosaure/usine
+License:                MIT
+Plugins:                META (0.3), DevFiles (0.3)
+BuildTools:             ocamlbuild
+OCamlVersion:           >= 4.01
+
+Executable usine
+  Path:                 src
+  MainIs:               main.ml
+  BuildDepends:         uri (>= 1.3.13), cmdliner (>= 0.9.5),
+                        batteries (>= 2.2), lwt (>= 2.4.3),
+                        lwt.unix, re (>= 1.2.1), re.pcre

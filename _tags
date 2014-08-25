@@ -1,0 +1,32 @@
+# OASIS_START
+# DO NOT EDIT (digest: 7bbb467b1d066029888faf42458ef537)
+# Ignore VCS directories, you can use the same kind of rule outside
+# OASIS_START/STOP if you want to exclude directories that contains
+# useless stuff for the build process
+<**/.svn>: -traverse
+<**/.svn>: not_hygienic
+".bzr": -traverse
+".bzr": not_hygienic
+".hg": -traverse
+".hg": not_hygienic
+".git": -traverse
+".git": not_hygienic
+"_darcs": -traverse
+"_darcs": not_hygienic
+# Executable usine
+"src/main.byte": package(batteries)
+"src/main.byte": package(cmdliner)
+"src/main.byte": package(lwt)
+"src/main.byte": package(lwt.unix)
+"src/main.byte": package(re)
+"src/main.byte": package(re.pcre)
+"src/main.byte": package(uri)
+<src/*.ml{,i}>: package(batteries)
+<src/*.ml{,i}>: package(cmdliner)
+<src/*.ml{,i}>: package(lwt)
+<src/*.ml{,i}>: package(lwt.unix)
+<src/*.ml{,i}>: package(re)
+<src/*.ml{,i}>: package(re.pcre)
+<src/*.ml{,i}>: package(uri)
+# OASIS_STOP
+true: use_menhir, package(batteries)
